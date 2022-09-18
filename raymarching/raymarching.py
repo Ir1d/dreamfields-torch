@@ -170,6 +170,9 @@ class _composite_rays_train(Function):
         grad_depth = grad_depth.contiguous()
         grad_image = grad_image.contiguous()
 
+        if grad_depth.max() != 0:
+            print(grad_depth.min(), grad_depth.max(), grad_depth.mean())
+
         sigmas, rgbs, deltas, rays, weights_sum, depth, image = ctx.saved_tensors
         M, N = ctx.dims
    

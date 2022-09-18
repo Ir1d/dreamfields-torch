@@ -402,6 +402,11 @@ class Trainer(object):
         # currently fix white bg, MUST force all rays!
         outputs = self.model.render(rays_o, rays_d, staged=False, perturb=True, force_all_rays=True, **vars(self.opt))
         pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous()
+        pred_depth = outputs['depth'].reshape(B, H, W, 1).permute(0, 3, 1, 2).contiguous()
+
+        if 'rgb' in data:
+            # fixed pose
+            loss_0 = F.l1_loss(pred_rgb, data['rgb'].cuda()) + F.l1_loss(pred_depth.squeeze(), data['depth'].cuda())
         
         # clip loss
         pred_ws = outputs['weights_sum'].reshape(B, 1, H, W)
@@ -470,6 +475,8 @@ class Trainer(object):
         loss_origin = torch.clamp((outputs['origin'] ** 2).sum(), min=origin_thresh)
 
         loss = loss_clip + 0.5 * loss_tr + loss_origin
+        if 'rgb' in data:
+            loss += loss_0
         #loss = loss_clip + 0.25 * loss_tr
 
         #print('[DEBUG]', loss_clip.item(), mean_tr.item(), loss_origin.item())

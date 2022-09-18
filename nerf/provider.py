@@ -13,6 +13,8 @@ from torch.utils.data import DataLoader
 
 from .utils import get_rays
 
+from PIL import Image
+
 
 # ref: https://github.com/NVlabs/instant-ngp/blob/b76004c8cf478880227401ae763be4c02f80b62f/include/neural-graphics-primitives/nerf_loader.h#L50
 def nerf_matrix_to_ngp(pose, scale=0.33):
@@ -130,6 +132,13 @@ class NeRFDataset:
         # [debug] visualize poses
         #poses = rand_poses(100, 'cpu', radius=self.radius).detach().numpy()
         #visualize_poses(poses)
+        im = cv2.imread('depth.png', 0)
+        im = cv2.resize(im, (self.H, self.W))
+        self.depth = torch.FloatTensor(im).float() / 255#.unsqueeze(0)
+        im = Image.open('rgb.png').convert('RGB')
+        im = im.resize((self.H, self.W))
+        im = np.array(im)
+        self.rgb = torch.FloatTensor(im).float().permute(2, 0, 1).unsqueeze(0) / 255#.unsqueeze(0)
 
 
     def collate(self, index):
@@ -137,17 +146,28 @@ class NeRFDataset:
         B = len(index) # always 1
 
         # random pose
-        poses = rand_poses(B, self.device, radius=self.radius)
+        if np.random.random() > 0.5:
+            poses = rand_poses(B, self.device, radius=self.radius)
+            ctf = 0
+        else:
+            # fixed 1 pose
+            poses = rand_poses(B, self.device, radius=self.radius, theta_range=[np.pi/2, np.pi/2], phi_range=[np.pi, np.pi])
+            ctf = 1
+
 
         # sample a low-resolution but full image for CLIP
         rays = get_rays(poses, self.intrinsics, self.H, self.W, -1)
 
-        return {
+        res = {
             'H': self.H,
             'W': self.W,
             'rays_o': rays['rays_o'],
             'rays_d': rays['rays_d'],    
         }
+        if ctf:
+            res['rgb'] = self.rgb
+            res['depth'] = self.depth
+        return res
 
     def dataloader(self):
         loader = DataLoader(list(range(self.size)), batch_size=1, collate_fn=self.collate, shuffle=self.training, num_workers=0)
